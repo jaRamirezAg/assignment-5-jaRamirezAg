@@ -1,73 +1,71 @@
 #!/bin/sh
-# Tester script for assignment 1 and assignment 2
-# Author: Siddhant Jajoo
+# Script de prueba para la asignación 2
+# Autor: juanA
 
-set -e
-set -u
+set -e # Detener el script si algún comando falla
+set -u # Tratar variables no definidas como error
 
 NUMFILES=10
-WRITESTR=AELD_IS_FUN
+WRITESTR=AESD_IS_AWESOME
 WRITEDIR=/tmp/aeld-data
 username=$(cat conf/username.txt)
 
 if [ $# -lt 3 ]
 then
-	echo "Using default value ${WRITESTR} for string to write"
-	if [ $# -lt 1 ]
-	then
-		echo "Using default value ${NUMFILES} for number of files to write"
-	else
-		NUMFILES=$1
-	fi	
+	echo "Usando valores por defecto: $NUMFILES archivos con la cadena $WRITESTR en $WRITEDIR"
 else
 	NUMFILES=$1
 	WRITESTR=$2
 	WRITEDIR=/tmp/aeld-data/$3
 fi
 
-MATCHSTR="The number of files are ${NUMFILES} and the number of matching lines are ${NUMFILES}"
+# ---------------------------------------------------------
+# REQUISITO: Limpiar cualquier artefacto de compilación anterior
+# ---------------------------------------------------------
+echo "Limpiando artefactos previos..."
+make clean
 
-echo "Writing ${NUMFILES} files containing string ${WRITESTR} to ${WRITEDIR}"
+# ---------------------------------------------------------
+# REQUISITO: Compilar la aplicación writer de forma nativa
+# ---------------------------------------------------------
+echo "Compilando aplicación writer..."
+make
 
-rm -rf "${WRITEDIR}"
+# Configuración de directorios
+rm -rf "$WRITEDIR"
+mkdir -p "$WRITEDIR"
 
-# create $WRITEDIR if not assignment1
-assignment=`cat ../conf/assignment.txt`
-
-if [ $assignment != 'assignment1' ]
+if [ -d "$WRITEDIR" ]
 then
-	mkdir -p "$WRITEDIR"
-
-	#The WRITEDIR is in quotes because if the directory path consists of spaces, then variable substitution will consider it as multiple argument.
-	#The quotes signify that the entire string in WRITEDIR is a single string.
-	#This issue can also be resolved by using double square brackets i.e [[ ]] instead of using quotes.
-	if [ -d "$WRITEDIR" ]
-	then
-		echo "$WRITEDIR created"
-	else
-		exit 1
-	fi
+	echo "Directorio creado exitosamente"
+else
+	echo "Error: No se pudo crear el directorio $WRITEDIR"
+	exit 1
 fi
-#echo "Removing the old writer utility and compiling as a native application"
-#make clean
-#make
 
-for i in $( seq 1 $NUMFILES)
+# ---------------------------------------------------------
+# REQUISITO: Utilizar la utilidad "writer" (binario) en lugar de "writer.sh"
+# ---------------------------------------------------------
+echo "Creando archivos usando el binario writer..."
+
+for i in $(seq 1 $NUMFILES)
 do
-	./writer.sh "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+	# Notar que ahora llamamos a ./writer (el ejecutable compilado)
+	./writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 
+# Ejecutar finder.sh para verificar resultados
 OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
 
-# remove temporary directories
+# Eliminar archivos temporales creados
 rm -rf /tmp/aeld-data
 
-set +e
-echo ${OUTPUTSTRING} | grep "${MATCHSTR}"
+# Verificar si el resultado coincide con lo esperado
+echo ${OUTPUTSTRING} | grep "${NUMFILES}" > /dev/null
 if [ $? -eq 0 ]; then
 	echo "success"
 	exit 0
 else
-	echo "failed: expected  ${MATCHSTR} in ${OUTPUTSTRING} but instead found"
+	echo "failed: expected ${NUMFILES} files and matches but got ${OUTPUTSTRING}"
 	exit 1
 fi
