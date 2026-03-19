@@ -1,4 +1,9 @@
 #include "systemcalls.h"
+#include <stdlib.h>      // Para system(), exit(), EXIT_FAILURE
+#include <unistd.h>      // Para fork(), execv(), close(), dup2()
+#include <sys/wait.h>    // Para waitpid(), WIFEXITED(), WEXITSTATUS()
+#include <sys/types.h>   // Para el tipo pid_t
+#include <fcntl.h>       // Para open() y las constantes O_WRONLY, O_CREAT, O_TRUNC
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +21,13 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+ int ret = system(cmd);
+ if (ret == -1) return false;
 
-    return true;
+ if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) {
+        return true;
+ }
+ return false;
 }
 
 /**
@@ -47,7 +57,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -59,9 +69,43 @@ bool do_exec(int count, ...)
  *
 */
 
+    pid_t pid = fork();
+    if (pid == -1) {
+        // 1. Error al crear el proceso (Fallo de fork)
+        perror("fork");
+        va_end(args);
+        return false;
+    }
+
+    if (pid == 0) {
+        // 2. Proceso HIJO
+        // Intentamos ejecutar el comando. 
+        execv(command[0], command);
+
+        // Si execv tiene éxito, NUNCA llega a esta línea porque el proceso
+        // es reemplazado por el nuevo programa.
+        // Si llega aquí, es que hubo un error (ej: archivo no encontrado).
+        perror("execv");
+        exit(EXIT_FAILURE); 
+    }
+
+   // 3. Proceso PADRE
+    int status;
+    // Esperamos específicamente a que nuestro hijo (pid) termine
+    if (waitpid(pid, &status, 0) == -1) {
+        perror("waitpid");
+        va_end(args);
+        return false;
+    }
+
     va_end(args);
 
-    return true;
+    // 4. Verificar si el hijo terminó con éxito (exit code 0)
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        return true;
+    }
+
+    return false;
 }
 
 /**
@@ -82,7 +126,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -92,8 +136,49 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int fd = open(outputfile, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+    if (fd < 0) { 
+        perror("open"); 
+        va_end(args);
+        return false; 
+    }
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("fork");
+        close(fd);
+        va_end(args);
+        return false;
+    } 
+    
+    if (pid == 0) {
+        // PROCESO HIJO
+        // Redirigir la salida estándar (1) al descriptor del archivo (fd)
+        if (dup2(fd, 1) < 0) { 
+            perror("dup2"); 
+            exit(EXIT_FAILURE); 
+        }
+        
+        // Una vez duplicado, ya no necesitamos el descriptor original abierto
+        close(fd);
+
+        // Ejecutar el comando (ahora escribirá en el archivo en lugar de la consola)
+        execv(command[0], command);
+
+        // Si llega aquí, execv falló
+        perror("execv");
+        exit(EXIT_FAILURE);
+    } 
+
+    // PROCESO PADRE
+    close(fd); // El padre no necesita el archivo abierto
+    int status;
+    if (waitpid(pid, &status, 0) == -1) {
+        va_end(args);
+        return false;
+    }
 
     va_end(args);
-
-    return true;
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }

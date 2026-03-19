@@ -22,14 +22,11 @@ fi
 # ---------------------------------------------------------
 # REQUISITO: Limpiar cualquier artefacto de compilación anterior
 # ---------------------------------------------------------
-echo "Limpiando artefactos previos..."
-make clean
+
 
 # ---------------------------------------------------------
 # REQUISITO: Compilar la aplicación writer de forma nativa
 # ---------------------------------------------------------
-echo "Compilando aplicación writer..."
-make
 
 # Configuración de directorios
 rm -rf "$WRITEDIR"
