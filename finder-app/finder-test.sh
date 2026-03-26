@@ -1,64 +1,57 @@
 #!/bin/sh
 # Script de prueba para la asignación 4 - Adaptado para Buildroot
-# Autor: juanA
-
 set -e 
 set -u 
 
-# --- REQUISITO 4b: Rutas de configuración ---
-# En Buildroot, los archivos de configuración deben estar en /etc/finder-app/conf
 CONF_DIR=/etc/finder-app/conf
 if [ -d "$CONF_DIR" ]; then
     username=$(cat "$CONF_DIR/username.txt")
 else
-    # Fallback para desarrollo local si no existe la ruta de Buildroot
     username=$(cat conf/username.txt)
 fi
 
+# 1. Definimos la base
 NUMFILES=10
 WRITESTR=AESD_IS_AWESOME
-WRITEDIR=/tmp/aeld-data
+WRITEDIR_BASE=/tmp/aeld-data
 
-if [ $# -lt 3 ]; then
-    echo "Usando valores por defecto"
-else
+# 2. Ajustamos según argumentos
+if [ $# -ge 3 ]; then
     NUMFILES=$1
     WRITESTR=$2
-    WRITEDIR=/tmp/aeld-data/$3
+    WRITEDIR=$WRITEDIR_BASE/$3
+else
+    echo "Usando valores por defecto"
+    WRITEDIR=$WRITEDIR_BASE
 fi
 
-# Configuración de directorios
+# 3. CREAR EL DIRECTORIO (Punto crítico)
 rm -rf "$WRITEDIR"
 mkdir -p "$WRITEDIR"
 
-# --- REQUISITO 4b: Uso del PATH ---
-# Eliminamos el "./" para que el sistema busque "writer" y "finder.sh" en /usr/bin
 echo "Creando archivos usando el binario writer desde el PATH..."
 
 for i in $(seq 1 $NUMFILES)
 do
-    # Ahora llamamos a 'writer' directamente (estará en /usr/bin/)
     writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 
-# Ejecutar finder.sh (también debe estar en el PATH)
-#OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR")
-OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR" | tail -n 1 | xargs)
+# 4. Ejecutar finder.sh y limpiar salida
+OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR" | tr -d '\r' | xargs)
 
-# --- REQUISITO 4c: Escribir resultado en /tmp/assignment4-result.txt ---
+# Escribir resultado
 echo "${OUTPUTSTRING}" > /tmp/assignment4-result.txt
 
-# Extraer solo los números de la cadena para comparar (esto no falla nunca)
-FOUND_FILES=$(echo "$OUTPUTSTRING" | cut -d ' ' -f 5)
-FOUND_LINES=$(echo "$OUTPUTSTRING" | cut -d ' ' -f 11)
+# 5. EXTRAER NÚMEROS (Basado en tu salida: "The number of files are 10...")
+# En esa frase, el número 10 es la palabra 5 y la palabra 11
+FOUND_FILES=$(echo "$OUTPUTSTRING" | awk '{print $5}')
+FOUND_LINES=$(echo "$OUTPUTSTRING" | awk '{print $11}')
 
-# Limpieza opcional de datos de prueba
-rm -rf /tmp/aeld-data
-
-# Verificar si el resultado coincide con lo esperado
-# Verificación simplificada
+# 6. VERIFICACIÓN
 if [ "$FOUND_FILES" = "$NUMFILES" ] && [ "$FOUND_LINES" = "$NUMFILES" ]; then
     echo "success"
+    # Solo borramos si tuvimos éxito
+    rm -rf "$WRITEDIR_BASE"
     exit 0
 else
     echo "failed: expected ${NUMFILES} files but got ${OUTPUTSTRING}"
