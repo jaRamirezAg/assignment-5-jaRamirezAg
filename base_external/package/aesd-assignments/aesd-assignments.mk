@@ -1,5 +1,5 @@
 # Reemplaza 'master' por el hash de tu commit si quieres fijar una versión
-AESD_ASSIGNMENTS_VERSION = main
+AESD_ASSIGNMENTS_VERSION = 5da11191e69de2353e12e9e537074014d613670b
 # Asegúrate de que esta URL sea la de tu repo de la TAREA 3 (donde está el código)
 AESD_ASSIGNMENTS_SITE = git@github.com:jaRamirezAg/assignment-4-jaRamirezAg.git
 AESD_ASSIGNMENTS_SITE_METHOD = git
