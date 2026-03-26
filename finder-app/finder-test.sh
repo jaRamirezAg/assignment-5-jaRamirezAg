@@ -1,57 +1,44 @@
 #!/bin/sh
-# Script de prueba para la asignación 4 - Adaptado para Buildroot
-set -e 
-set -u 
+set -e
+set -u
 
-CONF_DIR=/etc/finder-app/conf
-if [ -d "$CONF_DIR" ]; then
-    username=$(cat "$CONF_DIR/username.txt")
+NUMFILES=10
+WRITESTR=AESD_IS_AWESOME
+WRITEDIR=/tmp/aeld-data
+
+if [ -d /etc/finder-app/conf ]; then
+    username=$(cat /etc/finder-app/conf/username.txt)
 else
     username=$(cat conf/username.txt)
 fi
 
-# 1. Definimos la base
-NUMFILES=10
-WRITESTR=AESD_IS_AWESOME
-WRITEDIR_BASE=/tmp/aeld-data
-
-# 2. Ajustamos según argumentos
-if [ $# -ge 3 ]; then
+if [ $# -lt 3 ]; then
+    echo "Usando valores por defecto"
+else
     NUMFILES=$1
     WRITESTR=$2
-    WRITEDIR=$WRITEDIR_BASE/$3
-else
-    echo "Usando valores por defecto"
-    WRITEDIR=$WRITEDIR_BASE
+    WRITEDIR=/tmp/aeld-data/$3
 fi
 
-# 3. CREAR EL DIRECTORIO (Punto crítico)
-rm -rf "$WRITEDIR"
-mkdir -p "$WRITEDIR"
+# El string exacto que esperamos
+MATCHSTR="The number of files are ${NUMFILES} and the number of matching lines are ${NUMFILES}"
 
 echo "Creando archivos usando el binario writer desde el PATH..."
+rm -rf "${WRITEDIR}"
+mkdir -p "$WRITEDIR"
 
 for i in $(seq 1 $NUMFILES)
 do
     writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 
-# 4. Ejecutar finder.sh y limpiar salida
-OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR" | tr -d '\r' | xargs)
-
-# Escribir resultado
+# Ejecutamos finder y capturamos salida
+OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR")
 echo "${OUTPUTSTRING}" > /tmp/assignment4-result.txt
 
-# 5. EXTRAER NÚMEROS (Basado en tu salida: "The number of files are 10...")
-# En esa frase, el número 10 es la palabra 5 y la palabra 11
-FOUND_FILES=$(echo "$OUTPUTSTRING" | awk '{print $5}')
-FOUND_LINES=$(echo "$OUTPUTSTRING" | awk '{print $11}')
-
-# 6. VERIFICACIÓN
-if [ "$FOUND_FILES" = "$NUMFILES" ] && [ "$FOUND_LINES" = "$NUMFILES" ]; then
+# Comparación directa
+if [ "$OUTPUTSTRING" = "$MATCHSTR" ]; then
     echo "success"
-    # Solo borramos si tuvimos éxito
-    rm -rf "$WRITEDIR_BASE"
     exit 0
 else
     echo "failed: expected ${NUMFILES} files but got ${OUTPUTSTRING}"
