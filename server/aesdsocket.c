@@ -28,11 +28,18 @@ void daemonize() {
     pid_t pid = fork();
     if (pid < 0) exit(-1);
     if (pid > 0) exit(0); // Proceso padre termina
+
     setsid();
     chdir("/");
-    close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
+
+    // CRUCIAL: No solo cerrar, sino redirigir al agujero negro (/dev/null)
+    int fd = open("/dev/null", O_RDWR);
+    if (fd >= 0) {
+        dup2(fd, STDIN_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+        close(fd);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -54,8 +61,11 @@ int main(int argc, char *argv[]) {
     if (getaddrinfo(NULL, PORT, &hints, &res) != 0) return -1;
 
     server_fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (server_fd == -1) { freeaddrinfo(res); return -1; }
-
+    if (server_fd == -1) { 
+        syslog(LOG_ERR, "Error en socket");
+        freeaddrinfo(res); 
+        return -1; 
+    } 
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -71,7 +81,13 @@ int main(int argc, char *argv[]) {
         daemonize();
     }
 
-    if (listen(server_fd, 10) != 0) return -1;
+
+    if (listen(server_fd, 10) != 0) {
+        syslog(LOG_ERR, "Error en listen");
+        close(server_fd);
+        return -1;
+    }
+
 
 while (1) {
         struct sockaddr_in client_addr;
