@@ -12,7 +12,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential cpio file python3 rsync unzip wget qemu-system-x86
+          sudo apt-get install -y bc build-essential cpio file python3 rsync unzip wget qemu-system-x86 valgrind netcat-openbsd
 
       - name: Build and Test
         run: |
