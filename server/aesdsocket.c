@@ -27,12 +27,9 @@ void handle_signal(int sig) {
 void daemonize() {
     pid_t pid = fork();
     if (pid < 0) exit(-1);
-    if (pid > 0) exit(0); // Proceso padre termina
-
+    if (pid > 0) exit(0);
     setsid();
     chdir("/");
-
-    // CRUCIAL: No solo cerrar, sino redirigir al agujero negro (/dev/null)
     int fd = open("/dev/null", O_RDWR);
     if (fd >= 0) {
         dup2(fd, STDIN_FILENO);
@@ -61,74 +58,61 @@ int main(int argc, char *argv[]) {
     if (getaddrinfo(NULL, PORT, &hints, &res) != 0) return -1;
 
     server_fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (server_fd == -1) { 
-        syslog(LOG_ERR, "Error en socket");
-        freeaddrinfo(res); 
-        return -1; 
-    } 
+    if (server_fd == -1) { freeaddrinfo(res); return -1; }
+
     int opt = 1;
+    // SO_REUSEADDR es vital para que Valgrind no falle si el puerto quedó "limbo"
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     if (bind(server_fd, res->ai_addr, res->ai_addrlen) != 0) {
+        syslog(LOG_ERR, "Bind failed: %m");
         freeaddrinfo(res);
         close(server_fd);
         return -1;
     }
     freeaddrinfo(res);
 
-    // Requisito 5: Daemonize después de hacer el bind con éxito
     if (argc > 1 && strcmp(argv[1], "-d") == 0) {
         daemonize();
     }
 
+    if (listen(server_fd, 10) != 0) { close(server_fd); return -1; }
 
-    if (listen(server_fd, 10) != 0) {
-        syslog(LOG_ERR, "Error en listen");
-        close(server_fd);
-        return -1;
-    }
-
-
-while (1) {
+    while (1) {
         struct sockaddr_in client_addr;
         socklen_t addr_size = sizeof(client_addr);
         int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
-        
         if (client_fd == -1) continue;
 
         char client_ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
         syslog(LOG_INFO, "Accepted connection from %s", client_ip);
 
-        // PASO 1: Abrir para ESCRIBIR (Append)
-        FILE *fp_write = fopen(DATA_FILE, "a");
-        if (!fp_write) {
-            close(client_fd);
-            continue;
+        // ABRIR PARA ESCRIBIR
+        FILE *fp = fopen(DATA_FILE, "a");
+        if (fp) {
+            char buffer[BUFFER_SIZE];
+            ssize_t bytes_recv;
+            while ((bytes_recv = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
+                fwrite(buffer, 1, bytes_recv, fp);
+                if (memchr(buffer, '\n', bytes_recv)) break;
+            }
+            fclose(fp);
         }
 
-        char buffer[BUFFER_SIZE];
-        ssize_t bytes_recv;
-        
-        while ((bytes_recv = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
-            fwrite(buffer, 1, bytes_recv, fp_write);
-            if (memchr(buffer, '\n', bytes_recv)) break;
-        }
-        fclose(fp_write); // Cerramos después de escribir para asegurar el flush total
-
-        // PASO 2: Abrir para LEER y enviar todo
-        FILE *fp_read = fopen(DATA_FILE, "r");
-        if (fp_read) {
+        // ABRIR PARA LEER Y ENVIAR
+        fp = fopen(DATA_FILE, "r");
+        if (fp) {
+            char buffer[BUFFER_SIZE];
             size_t bytes_read;
-            while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp_read)) > 0) {
+            while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0) {
                 send(client_fd, buffer, bytes_read, 0);
             }
-            fclose(fp_read);
+            fclose(fp);
         }
 
         close(client_fd);
         syslog(LOG_INFO, "Closed connection from %s", client_ip);
     }
-
     return 0;
 }
