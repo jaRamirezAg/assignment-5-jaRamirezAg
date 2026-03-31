@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 
     if (listen(server_fd, 10) != 0) return -1;
 
-    while (1) {
+while (1) {
         struct sockaddr_in client_addr;
         socklen_t addr_size = sizeof(client_addr);
         int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
@@ -84,9 +84,9 @@ int main(int argc, char *argv[]) {
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
         syslog(LOG_INFO, "Accepted connection from %s", client_ip);
 
-        // Abrir archivo para añadir (append) y leer (+)
-        FILE *fp = fopen(DATA_FILE, "a+");
-        if (!fp) {
+        // PASO 1: Abrir para ESCRIBIR (Append)
+        FILE *fp_write = fopen(DATA_FILE, "a");
+        if (!fp_write) {
             close(client_fd);
             continue;
         }
@@ -94,24 +94,22 @@ int main(int argc, char *argv[]) {
         char buffer[BUFFER_SIZE];
         ssize_t bytes_recv;
         
-        // Recibir datos hasta encontrar un newline
         while ((bytes_recv = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
-            fwrite(buffer, 1, bytes_recv, fp);
-            fflush(fp); // Asegurar que se escriba al disco antes de leer
+            fwrite(buffer, 1, bytes_recv, fp_write);
             if (memchr(buffer, '\n', bytes_recv)) break;
         }
+        fclose(fp_write); // Cerramos después de escribir para asegurar el flush total
 
-        // Reenviar TODO el contenido acumulado
-        rewind(fp);
-        size_t bytes_read;
-        while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0) {
-		if (send(client_fd, buffer, bytes_read, 0) == -1) {
-                    syslog(LOG_ERR, "Error sending data");
-                    break;  
-		}      
-	}
+        // PASO 2: Abrir para LEER y enviar todo
+        FILE *fp_read = fopen(DATA_FILE, "r");
+        if (fp_read) {
+            size_t bytes_read;
+            while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp_read)) > 0) {
+                send(client_fd, buffer, bytes_read, 0);
+            }
+            fclose(fp_read);
+        }
 
-        fclose(fp);
         close(client_fd);
         syslog(LOG_INFO, "Closed connection from %s", client_ip);
     }
