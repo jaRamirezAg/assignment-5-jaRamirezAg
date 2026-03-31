@@ -2,3 +2,6 @@
 build/
 .vscode/
 *.log
+server/aesdsocket
+server/*.o
+/var/tmp/aesdsocketdata

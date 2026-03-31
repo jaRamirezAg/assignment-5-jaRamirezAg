@@ -27,7 +27,7 @@ void handle_signal(int sig) {
 void daemonize() {
     pid_t pid = fork();
     if (pid < 0) exit(-1);
-    if (pid > 0) exit(0);
+    if (pid > 0) exit(0); // Proceso padre termina
     setsid();
     chdir("/");
     close(STDIN_FILENO);
@@ -38,7 +38,6 @@ void daemonize() {
 int main(int argc, char *argv[]) {
     openlog("aesdsocket", LOG_PID, LOG_USER);
 
-    // Configurar señales
     struct sigaction sa;
     sa.sa_handler = handle_signal;
     sigemptyset(&sa.sa_mask);
@@ -46,7 +45,6 @@ int main(int argc, char *argv[]) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    // Configurar Socket
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
@@ -62,11 +60,13 @@ int main(int argc, char *argv[]) {
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     if (bind(server_fd, res->ai_addr, res->ai_addrlen) != 0) {
-        freeaddrinfo(res); return -1;
+        freeaddrinfo(res);
+        close(server_fd);
+        return -1;
     }
     freeaddrinfo(res);
 
-    // Modo Demonio
+    // Requisito 5: Daemonize después de hacer el bind con éxito
     if (argc > 1 && strcmp(argv[1], "-d") == 0) {
         daemonize();
     }
@@ -84,23 +84,30 @@ int main(int argc, char *argv[]) {
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
         syslog(LOG_INFO, "Accepted connection from %s", client_ip);
 
-        // Lógica de recepción y reenvío (Requisito 2e y 2f)
+        // Abrir archivo para añadir (append) y leer (+)
         FILE *fp = fopen(DATA_FILE, "a+");
-	if (fp == NULL) { /* error */ }
+        if (!fp) {
+            close(client_fd);
+            continue;
+        }
+
         char buffer[BUFFER_SIZE];
         ssize_t bytes_recv;
         
+        // Recibir datos hasta encontrar un newline
         while ((bytes_recv = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
             fwrite(buffer, 1, bytes_recv, fp);
-	    fflush(fp);
+            fflush(fp); // Asegurar que se escriba al disco antes de leer
             if (memchr(buffer, '\n', bytes_recv)) break;
         }
 
-        // Enviar todo el archivo de vuelta
+        // Reenviar TODO el contenido acumulado
         rewind(fp);
-        while (fgets(buffer, BUFFER_SIZE, fp) != NULL) {
-    	     send(client_fd, buffer, strlen(buffer), 0);
-	}
+        size_t bytes_read;
+        while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0) {
+            send(client_fd, buffer, bytes_read, 0);
+        }
+
         fclose(fp);
         close(client_fd);
         syslog(LOG_INFO, "Closed connection from %s", client_ip);
