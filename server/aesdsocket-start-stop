@@ -1,39 +1,16 @@
-#!/sh
-
-# Variables para facilitar el mantenimiento
-DAEMON="aesdsocket"
-BINARY="/usr/bin/aesdsocket"
-PIDFILE="/var/run/$DAEMON.pid"
-
+#!/bin/sh
 case "$1" in
     start)
-        echo "Starting aesdsocket daemon"
-        # -S: Start
-        # -n: Nombre del proceso
-        # -a: Ruta al ejecutable
-        # -b: Forzar ejecución en segundo plano (aunque -d ya lo hace, start-stop-daemon lo prefiere)
-        # -- : Los argumentos después de esto se pasan a aesdsocket (-d)
-        start-stop-daemon -S -n $DAEMON -a $BINARY -- -d
+        echo "Starting aesdsocket..."
+        start-stop-daemon -S -n aesdsocket -a /usr/bin/aesdsocket -- -d
         ;;
     stop)
-        echo "Stopping aesdsocket daemon"
-        # -K: Kill (detener)
-        # -n: Nombre del proceso
-        # -s TERM: Envía SIGTERM (requerido por el enunciado para limpieza)
-        start-stop-daemon -K -n $DAEMON -s TERM
-        
-        # Opcional pero recomendado: limpieza manual del archivo de datos
-        # si tu programa no lo borra al recibir SIGTERM
+        echo "Stopping aesdsocket..."
+        start-stop-daemon -K -n aesdsocket
         rm -f /var/tmp/aesdsocketdata
         ;;
-    restart)
-        $0 stop
-        sleep 1
-        $0 start
-        ;;
     *)
-        echo "Usage: $0 {start|stop|restart}"
+        echo "Usage: $0 {start|stop}"
         exit 1
 esac
-
 exit 0
