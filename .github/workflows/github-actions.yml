@@ -2,19 +2,22 @@ name: Buildroot Build
 on: [push, pull_request]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest  # Mantenemos esto para que no se quede esperando
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bc build-essential cpio file python3 rsync unzip wget qemu-system-x86 valgrind netcat-openbsd
-
-      - name: Build and Test
-        run: |
-          # Aquí el script de la tarea 5 ejecutará todo automáticamente
-          ./full-test.sh
+    full-test:
+        container: cuaesd/aesd-autotest:24-assignment5-buildroot
+        runs-on: self-hosted
+        timeout-minutes: 120
+        steps:
+          - uses: actions/checkout@v2
+          - name: Checkout submodules
+            run: git submodule update --init --recursive
+          - uses: webfactory/ssh-agent@v0.5.3
+            with:
+                ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          - name: Run full test
+            env:
+              GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=no"
+            run: ./full-test.sh
+          - name: Cleanup
+            if: always()
+            run: |
+              ssh-add -D
